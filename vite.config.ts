@@ -17,6 +17,7 @@ export default defineConfig({
 		tailwindcss(),
 		VitePWA({
 			registerType: "autoUpdate",
+			injectRegister: "auto",
 			workbox: {
 				globPatterns: ["**/*.{js,css,html,ico,png,svg,mp3}"],
 				cleanupOutdatedCaches: true,
@@ -40,15 +41,6 @@ export default defineConfig({
 						sizes: "192x192",
 						type: "image/png",
 						purpose: "any maskable",
-					},
-				],
-				shortcuts: [
-					{
-						name: "Set Alarm",
-						short_name: "New Alarm",
-						description: "Set a new alarm",
-						url: "/?action=set-alarm",
-						icons: [{ src: "icons/alarm-shortcut.png", sizes: "96x96" }],
 					},
 				],
 			},
