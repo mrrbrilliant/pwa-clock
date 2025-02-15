@@ -138,11 +138,15 @@ const AlarmClock: React.FC = () => {
 	};
 
 	const handleAlarmTrigger = async (): Promise<void> => {
-		console.log("Alarm trigger handler called");
+		console.log("=== Alarm Trigger Sequence Start ===");
+		console.log("Current Time:", new Date().toLocaleString());
+		console.log("Alarm State:", { isAlarmSet, isAlarmRinging });
+
 		setIsAlarmRinging(true);
 
 		// Show notification
 		if (permission === "granted" && swRegistration) {
+			console.log("Showing notification");
 			const options = {
 				body: "Your alarm is ringing!",
 				icon: "icons/icon-192x192.png",
@@ -155,12 +159,43 @@ const AlarmClock: React.FC = () => {
 
 		// Play sound
 		if (audioRef.current) {
+			console.log("Audio element found, attempting to play");
+			console.log("Audio element state:", {
+				currentTime: audioRef.current.currentTime,
+				paused: audioRef.current.paused,
+				volume: audioRef.current.volume,
+				muted: audioRef.current.muted,
+				readyState: audioRef.current.readyState,
+			});
+
 			try {
-				await audioRef.current.play();
-			} catch (error) {
+				const playPromise = audioRef.current.play();
+				console.log("Play method called");
+
+				await playPromise;
+				console.log("Audio playback started successfully");
+
+				// Add event listeners for audio state changes
+				audioRef.current.onplay = () => console.log("Audio play event fired");
+				audioRef.current.onplaying = () =>
+					console.log("Audio playing event fired");
+				audioRef.current.onpause = () => console.log("Audio pause event fired");
+				audioRef.current.onerror = (e) =>
+					console.error("Audio error event:", e);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			} catch (error: any) {
 				console.error("Error playing alarm sound:", error);
+				console.error("Error details:", {
+					name: error.name,
+					message: error.message,
+					stack: error.stack,
+				});
 			}
+		} else {
+			console.error("Audio element not found in ref");
 		}
+
+		console.log("=== Alarm Trigger Sequence End ===");
 	};
 
 	return (
