@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Bell, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,22 +8,38 @@ const AlarmClock: React.FC = () => {
 	const [currentTime, setCurrentTime] = useState<Date>(new Date());
 	const [alarmTime, setAlarmTime] = useState<string>("");
 	const [isAlarmSet, setIsAlarmSet] = useState<boolean>(false);
+	const [isAlarmRinging, setIsAlarmRinging] = useState<boolean>(false);
 	const [permission, setPermission] = useState<NotificationPermission>(
 		Notification.permission
 	);
 	const [swRegistration, setSwRegistration] =
 		useState<ServiceWorkerRegistration | null>(null);
 
+	// Use ref for audio to persist between renders
+	const audioRef = useRef<HTMLAudioElement | null>(null);
+
+	// Initialize audio on mount
+	useEffect(() => {
+		audioRef.current = new Audio("/alarm-sound.mp3");
+		audioRef.current.loop = true;
+
+		// Cleanup on unmount
+		return () => {
+			if (audioRef.current) {
+				audioRef.current.pause();
+				audioRef.current = null;
+			}
+		};
+	}, []);
+
 	// Register service worker on component mount
 	useEffect(() => {
 		const registerServiceWorker = async (): Promise<void> => {
 			if ("serviceWorker" in navigator) {
 				try {
-					// For Vite PWA, the service worker is registered automatically
 					const registration = await navigator.serviceWorker.ready;
 					setSwRegistration(registration);
 
-					// Set up message handling from service worker
 					navigator.serviceWorker.addEventListener(
 						"message",
 						(event: MessageEvent) => {
@@ -41,7 +57,7 @@ const AlarmClock: React.FC = () => {
 		registerServiceWorker();
 	}, []);
 
-	// Update current time every second (when tab is active)
+	// Update current time every second
 	useEffect(() => {
 		const timer = setInterval(() => {
 			setCurrentTime(new Date());
@@ -65,19 +81,16 @@ const AlarmClock: React.FC = () => {
 			}
 		}
 
-		// Convert alarm time to timestamp
 		const [hours, minutes] = alarmTime.split(":").map(Number);
 		const alarmDate = new Date();
 		alarmDate.setHours(hours);
 		alarmDate.setMinutes(minutes);
 		alarmDate.setSeconds(0);
 
-		// If alarm time is in the past, set it for tomorrow
 		if (alarmDate < new Date()) {
 			alarmDate.setDate(alarmDate.getDate() + 1);
 		}
 
-		// Send alarm time to service worker using the registration
 		if (swRegistration.active) {
 			swRegistration.active.postMessage({
 				type: "SET_ALARM",
@@ -95,11 +108,20 @@ const AlarmClock: React.FC = () => {
 				type: "CLEAR_ALARM",
 			});
 			setIsAlarmSet(false);
+			setIsAlarmRinging(false);
 			setAlarmTime("");
+
+			// Stop audio
+			if (audioRef.current) {
+				audioRef.current.pause();
+				audioRef.current.currentTime = 0;
+			}
 		}
 	};
 
 	const handleAlarmTrigger = (): void => {
+		setIsAlarmRinging(true);
+
 		// Show notification
 		if (permission === "granted" && swRegistration) {
 			const options = {
@@ -112,10 +134,16 @@ const AlarmClock: React.FC = () => {
 			swRegistration.showNotification("Alarm!", options);
 		}
 
-		// Play sound (will only work when tab is active)
-		const audio = new Audio("alarm-sound.mp3");
-		audio.loop = true;
-		audio.play().catch(console.error);
+		// Play sound with error handling
+		if (audioRef.current) {
+			audioRef.current.play().catch((error) => {
+				console.error("Error playing alarm sound:", error);
+				// Attempt to recover by creating a new audio instance
+				audioRef.current = new Audio("/alarm-sound.mp3");
+				audioRef.current.loop = true;
+				audioRef.current.play().catch(console.error);
+			});
+		}
 	};
 
 	return (
@@ -124,6 +152,9 @@ const AlarmClock: React.FC = () => {
 				<CardTitle className="flex items-center justify-center gap-2">
 					<Clock className="h-6 w-6" />
 					PWA Alarm Clock
+					{isAlarmRinging && (
+						<Bell className="h-6 w-6 animate-bounce text-red-500" />
+					)}
 				</CardTitle>
 			</CardHeader>
 			<CardContent>
@@ -145,12 +176,10 @@ const AlarmClock: React.FC = () => {
 						</Alert>
 					)}
 
-					{/* Current Time Display */}
 					<div className="text-4xl font-bold">
 						{currentTime.toLocaleTimeString()}
 					</div>
 
-					{/* Alarm Input */}
 					<div className="w-full flex gap-4">
 						<input
 							type="time"
@@ -181,7 +210,6 @@ const AlarmClock: React.FC = () => {
 						)}
 					</div>
 
-					{/* Alarm Status */}
 					{isAlarmSet && (
 						<div className="text-sm text-muted-foreground">
 							Alarm set for {alarmTime}
