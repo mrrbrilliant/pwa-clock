@@ -25,14 +25,22 @@ const AlarmClock: React.FC = () => {
 					const registration = await navigator.serviceWorker.ready;
 					setSwRegistration(registration);
 
-					navigator.serviceWorker.addEventListener(
-						"message",
-						(event: MessageEvent) => {
-							if (event.data.type === "ALARM_TRIGGERED") {
-								handleAlarmTrigger();
-							}
+					// Set up message handling from service worker
+					const messageHandler = (event: MessageEvent) => {
+						console.log("Received message from service worker:", event.data);
+						if (event.data.type === "ALARM_TRIGGERED") {
+							console.log("Alarm triggered, attempting to play sound");
+							handleAlarmTrigger();
 						}
-					);
+					};
+
+					navigator.serviceWorker.addEventListener("message", messageHandler);
+					// return () => {
+					// 	navigator.serviceWorker.removeEventListener(
+					// 		"message",
+					// 		messageHandler
+					// 	);
+					// };
 				} catch (error) {
 					console.error("Service worker registration failed:", error);
 				}
@@ -49,6 +57,13 @@ const AlarmClock: React.FC = () => {
 		}, 1000);
 
 		return () => clearInterval(timer);
+	}, []);
+
+	// Pre-load audio when component mounts
+	useEffect(() => {
+		if (audioRef.current) {
+			audioRef.current.load();
+		}
 	}, []);
 
 	const handleSetAlarm = async (): Promise<void> => {
@@ -76,6 +91,8 @@ const AlarmClock: React.FC = () => {
 			alarmDate.setDate(alarmDate.getDate() + 1);
 		}
 
+		console.log("Setting alarm for:", alarmDate.toLocaleString());
+
 		if (swRegistration.active) {
 			swRegistration.active.postMessage({
 				type: "SET_ALARM",
@@ -88,6 +105,7 @@ const AlarmClock: React.FC = () => {
 	};
 
 	const handleStopAlarm = (): void => {
+		console.log("Stopping alarm");
 		if (swRegistration?.active) {
 			swRegistration.active.postMessage({
 				type: "CLEAR_ALARM",
@@ -104,7 +122,8 @@ const AlarmClock: React.FC = () => {
 		}
 	};
 
-	const handleAlarmTrigger = (): void => {
+	const handleAlarmTrigger = async (): Promise<void> => {
+		console.log("Alarm trigger handler called");
 		setIsAlarmRinging(true);
 
 		// Show notification
@@ -119,11 +138,27 @@ const AlarmClock: React.FC = () => {
 			swRegistration.showNotification("Alarm!", options);
 		}
 
-		// Play sound
+		// Play sound with user interaction check
 		if (audioRef.current) {
-			audioRef.current.play().catch((error) => {
-				console.error("Error playing alarm sound:", error);
-			});
+			try {
+				// Ensure audio is ready to play
+				await audioRef.current.load();
+				const playPromise = audioRef.current.play();
+
+				if (playPromise !== undefined) {
+					playPromise.catch((error) => {
+						console.error("Error playing alarm sound:", error);
+						// If autoplay was prevented, we might need user interaction
+						if (error.name === "NotAllowedError") {
+							console.log("Autoplay prevented - waiting for user interaction");
+						}
+					});
+				}
+			} catch (error) {
+				console.error("Error during audio playback:", error);
+			}
+		} else {
+			console.error("Audio element not found");
 		}
 	};
 
@@ -184,7 +219,9 @@ const AlarmClock: React.FC = () => {
 							<Button
 								onClick={handleStopAlarm}
 								variant="destructive"
-								className="flex items-center gap-2"
+								className={`flex items-center gap-2 ${
+									isAlarmRinging ? "animate-pulse" : ""
+								}`}
 							>
 								Stop Alarm
 							</Button>
@@ -197,8 +234,12 @@ const AlarmClock: React.FC = () => {
 						</div>
 					)}
 
-					{/* Hidden audio element */}
-					<audio ref={audioRef} src="/alarm-sound.mp3" loop preload="auto" />
+					{/* Audio element with multiple sources for better compatibility */}
+					<audio ref={audioRef} preload="auto" loop>
+						<source src="/alarm-sound.mp3" type="audio/mpeg" />
+						<source src="/alarm-sound.wav" type="audio/wav" />
+						Your browser does not support the audio element.
+					</audio>
 				</div>
 			</CardContent>
 		</Card>
