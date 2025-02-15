@@ -16,14 +16,11 @@ export default defineConfig({
 		react(),
 		tailwindcss(),
 		VitePWA({
+			strategies: "injectManifest",
+			srcDir: "src",
+			filename: "sw.ts",
 			registerType: "autoUpdate",
 			injectRegister: "auto",
-			workbox: {
-				globPatterns: ["**/*.{js,css,html,ico,png,svg,mp3}"],
-				cleanupOutdatedCaches: true,
-				skipWaiting: true,
-				clientsClaim: true,
-			},
 			manifest: {
 				name: "PWA Alarm Clock",
 				short_name: "Alarm",
@@ -47,7 +44,6 @@ export default defineConfig({
 			devOptions: {
 				enabled: true,
 				type: "module",
-				navigateFallback: "index.html",
 			},
 		}),
 	],

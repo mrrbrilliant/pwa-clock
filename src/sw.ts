@@ -1,4 +1,6 @@
-/// <reference lib="webworker" />
+import { precacheAndRoute } from "workbox-precaching";
+
+declare let self: ServiceWorkerGlobalScope;
 
 interface AlarmMessage {
 	type: "SET_ALARM" | "CLEAR_ALARM";
@@ -7,19 +9,10 @@ interface AlarmMessage {
 
 let alarmInterval: ReturnType<typeof setInterval> | undefined;
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-addEventListener("install", (event: ExtendableEvent) => {
-	console.log("Service Worker: Installing");
-	self.skipWaiting();
-});
+// Precache assets
+precacheAndRoute(self.__WB_MANIFEST);
 
-addEventListener("activate", (event: ExtendableEvent) => {
-	console.log("Service Worker: Activating");
-	event.waitUntil(self.clients.claim());
-});
-
-// Handle messages from the main app
-addEventListener("message", (event: ExtendableMessageEvent) => {
+self.addEventListener("message", (event: ExtendableMessageEvent) => {
 	const message = event.data as AlarmMessage;
 	console.log("Service Worker: Received message:", message);
 
@@ -87,18 +80,4 @@ addEventListener("message", (event: ExtendableMessageEvent) => {
 			alarmInterval = undefined;
 		}
 	}
-});
-
-// Handle notification clicks
-addEventListener("notificationclick", (event: NotificationEvent) => {
-	event.notification.close();
-	event.waitUntil(
-		self.clients.matchAll({ type: "window" }).then((windowClients) => {
-			if (windowClients.length > 0) {
-				windowClients[0].focus();
-			} else {
-				self.clients.openWindow("/");
-			}
-		})
-	);
 });
