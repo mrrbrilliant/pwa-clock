@@ -19,36 +19,57 @@ const AlarmClock: React.FC = () => {
 	const audioRef = useRef<HTMLAudioElement>(null);
 	const alarmTimeRef = useRef<number | null>(null);
 
-	// Register service worker on component mount
+	// Register service worker and set up message handling
 	useEffect(() => {
-		const registerServiceWorker = async (): Promise<void> => {
+		console.log("Component: Setting up service worker");
+
+		const messageHandler = (event: MessageEvent) => {
+			console.log("Component: Received message:", event.data);
+			if (event.data.type === "ALARM_TRIGGERED") {
+				console.log("Component: Alarm triggered, calling handler");
+				handleAlarmTrigger();
+			}
+		};
+
+		const setupServiceWorker = async () => {
 			if ("serviceWorker" in navigator) {
 				try {
-					const registration = await navigator.serviceWorker.ready;
+					// First, register or get the service worker
+					const registration = await navigator.serviceWorker.register(
+						"/service-worker.js",
+						{
+							scope: "/",
+						}
+					);
+					console.log("Component: Service Worker registered");
+
+					// Wait for the service worker to be ready
+					await navigator.serviceWorker.ready;
+					console.log("Component: Service Worker ready");
+
 					setSwRegistration(registration);
 
-					const messageHandler = (event: MessageEvent) => {
-						console.log("Received message from service worker:", event.data);
-						if (event.data.type === "ALARM_TRIGGERED") {
-							console.log("Alarm triggered, attempting to play sound");
-							handleAlarmTrigger();
-						}
-					};
-
+					// Add message listener
 					navigator.serviceWorker.addEventListener("message", messageHandler);
-					// return () => {
-					// 	navigator.serviceWorker.removeEventListener(
-					// 		"message",
-					// 		messageHandler
-					// 	);
-					// };
+					console.log("Component: Message listener added");
 				} catch (error) {
-					console.error("Service worker registration failed:", error);
+					console.error(
+						"Component: Service worker registration failed:",
+						error
+					);
 				}
 			}
 		};
 
-		registerServiceWorker();
+		setupServiceWorker();
+
+		// Cleanup
+		return () => {
+			if ("serviceWorker" in navigator) {
+				navigator.serviceWorker.removeEventListener("message", messageHandler);
+				console.log("Component: Message listener removed");
+			}
+		};
 	}, []);
 
 	// Update current time and check alarm
