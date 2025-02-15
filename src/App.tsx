@@ -15,22 +15,7 @@ const AlarmClock: React.FC = () => {
 	const [swRegistration, setSwRegistration] =
 		useState<ServiceWorkerRegistration | null>(null);
 
-	// Use ref for audio to persist between renders
-	const audioRef = useRef<HTMLAudioElement | null>(null);
-
-	// Initialize audio on mount
-	useEffect(() => {
-		audioRef.current = new Audio("/alarm-sound.mp3");
-		audioRef.current.loop = true;
-
-		// Cleanup on unmount
-		return () => {
-			if (audioRef.current) {
-				audioRef.current.pause();
-				audioRef.current = null;
-			}
-		};
-	}, []);
+	const audioRef = useRef<HTMLAudioElement>(null);
 
 	// Register service worker on component mount
 	useEffect(() => {
@@ -134,14 +119,10 @@ const AlarmClock: React.FC = () => {
 			swRegistration.showNotification("Alarm!", options);
 		}
 
-		// Play sound with error handling
+		// Play sound
 		if (audioRef.current) {
 			audioRef.current.play().catch((error) => {
 				console.error("Error playing alarm sound:", error);
-				// Attempt to recover by creating a new audio instance
-				audioRef.current = new Audio("/alarm-sound.mp3");
-				audioRef.current.loop = true;
-				audioRef.current.play().catch(console.error);
 			});
 		}
 	};
@@ -215,6 +196,9 @@ const AlarmClock: React.FC = () => {
 							Alarm set for {alarmTime}
 						</div>
 					)}
+
+					{/* Hidden audio element */}
+					<audio ref={audioRef} src="/alarm-sound.mp3" loop preload="auto" />
 				</div>
 			</CardContent>
 		</Card>
