@@ -1,83 +1,97 @@
-import { precacheAndRoute } from "workbox-precaching";
+/* eslint-disable no-var */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unused-expressions */
+/// <reference lib="webworker" />
+export default null;
+declare var self: ServiceWorkerGlobalScope;
 
-declare let self: ServiceWorkerGlobalScope;
+// Add type for Workbox Manifest
+declare const __WB_MANIFEST: Array<{
+	revision: string | null;
+	url: string;
+}>;
+
+// Inject manifest
+// self.__WB_MANIFEST;
+
+let alarmTimeout: number | null = null;
 
 interface AlarmMessage {
 	type: "SET_ALARM" | "CLEAR_ALARM";
 	timestamp?: number;
 }
 
-let alarmInterval: ReturnType<typeof setInterval> | undefined;
-
-// Precache assets
-precacheAndRoute(self.__WB_MANIFEST);
-
 self.addEventListener("message", (event: ExtendableMessageEvent) => {
 	const message = event.data as AlarmMessage;
-	console.log("Service Worker: Received message:", message);
+	console.log("SW received message:", message);
 
 	if (message.type === "SET_ALARM" && message.timestamp) {
 		// Clear any existing alarm
-		if (alarmInterval) {
-			clearInterval(alarmInterval);
+		if (alarmTimeout) {
+			clearTimeout(alarmTimeout);
+			alarmTimeout = null;
 		}
 
-		const targetTime = new Date(message.timestamp);
+		const targetTime = message.timestamp;
+		const timeUntilAlarm = targetTime - Date.now();
+
+		console.log("Setting alarm for:", new Date(targetTime).toLocaleString());
 		console.log(
-			"Service Worker: Setting alarm for",
-			targetTime.toLocaleString()
+			"Time until alarm:",
+			Math.floor(timeUntilAlarm / 1000),
+			"seconds"
 		);
 
-		// Check every second
-		alarmInterval = setInterval(async () => {
-			const now = new Date();
-			const timeUntilAlarm = message.timestamp! - now.getTime();
+		if (timeUntilAlarm > 0) {
+			alarmTimeout = setTimeout(async () => {
+				console.log("ALARM TIME!");
 
-			console.log(
-				"Service Worker: Time until alarm:",
-				Math.floor(timeUntilAlarm / 1000),
-				"seconds"
-			);
-
-			if (timeUntilAlarm <= 0) {
-				console.log("Service Worker: ALARM TIME REACHED!");
-
-				// Clear the interval
-				if (alarmInterval) {
-					clearInterval(alarmInterval);
-					alarmInterval = undefined;
+				// Notify all clients
+				const clients = await self.clients.matchAll({ type: "window" });
+				for (const client of clients) {
+					client.postMessage({ type: "ALARM_TRIGGERED" });
 				}
 
-				try {
-					// Get all clients
-					const clients = await self.clients.matchAll();
-					console.log("Service Worker: Found clients:", clients.length);
-
-					// Notify each client
-					clients.forEach((client) => {
-						console.log("Service Worker: Sending ALARM_TRIGGERED to client");
-						client.postMessage({
-							type: "ALARM_TRIGGERED",
-							timestamp: now.toISOString(),
-						});
-					});
-
-					// Show notification
-					await self.registration.showNotification("Alarm!", {
-						body: "Your alarm is ringing!",
-						icon: "/icons/icon-192x192.png",
-						tag: "alarm",
-					});
-				} catch (error) {
-					console.error("Service Worker: Error triggering alarm:", error);
-				}
-			}
-		}, 1000);
-	} else if (message.type === "CLEAR_ALARM") {
-		console.log("Service Worker: Clearing alarm");
-		if (alarmInterval) {
-			clearInterval(alarmInterval);
-			alarmInterval = undefined;
+				// Show notification
+				await self.registration.showNotification("Alarm!", {
+					body: "Your alarm is ringing!",
+					icon: "/icons/icon-192x192.png",
+					tag: "alarm",
+					requireInteraction: true,
+				});
+			}, timeUntilAlarm) as unknown as number;
 		}
 	}
+
+	if (message.type === "CLEAR_ALARM") {
+		if (alarmTimeout) {
+			clearTimeout(alarmTimeout);
+			alarmTimeout = null;
+		}
+	}
+});
+
+self.addEventListener("install", () => {
+	console.log("Service Worker installing");
+	self.skipWaiting();
+});
+
+self.addEventListener("activate", (event: ExtendableEvent) => {
+	console.log("Service Worker activating");
+	event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("notificationclick", (event: NotificationEvent) => {
+	console.log("Notification clicked");
+	event.notification.close();
+
+	event.waitUntil(
+		self.clients.matchAll({ type: "window" }).then((clients) => {
+			if (clients.length > 0) {
+				(clients[0] as WindowClient).focus();
+			} else {
+				self.clients.openWindow("/");
+			}
+		})
+	);
 });

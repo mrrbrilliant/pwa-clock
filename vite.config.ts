@@ -1,10 +1,3 @@
-// import { defineConfig } from 'vite'
-
-// // https://vite.dev/config/
-// export default defineConfig({
-//   plugins: [react()],
-// })
-
 import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
@@ -20,7 +13,6 @@ export default defineConfig({
 			srcDir: "src",
 			filename: "sw.ts",
 			registerType: "autoUpdate",
-			injectRegister: "auto",
 			manifest: {
 				name: "PWA Alarm Clock",
 				short_name: "Alarm",
@@ -54,7 +46,6 @@ export default defineConfig({
 	},
 	server: {
 		host: true,
-		allowedHosts: ["clock.baray.io"],
 		port: 4444,
 	},
 });
