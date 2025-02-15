@@ -14,8 +14,10 @@ const AlarmClock: React.FC = () => {
 	);
 	const [swRegistration, setSwRegistration] =
 		useState<ServiceWorkerRegistration | null>(null);
+	const [timeUntilAlarm, setTimeUntilAlarm] = useState<string>("");
 
 	const audioRef = useRef<HTMLAudioElement>(null);
+	const alarmTimeRef = useRef<number | null>(null);
 
 	// Register service worker on component mount
 	useEffect(() => {
@@ -25,7 +27,6 @@ const AlarmClock: React.FC = () => {
 					const registration = await navigator.serviceWorker.ready;
 					setSwRegistration(registration);
 
-					// Set up message handling from service worker
 					const messageHandler = (event: MessageEvent) => {
 						console.log("Received message from service worker:", event.data);
 						if (event.data.type === "ALARM_TRIGGERED") {
@@ -50,20 +51,24 @@ const AlarmClock: React.FC = () => {
 		registerServiceWorker();
 	}, []);
 
-	// Update current time every second
+	// Update current time and check alarm
 	useEffect(() => {
 		const timer = setInterval(() => {
-			setCurrentTime(new Date());
+			const now = new Date();
+			setCurrentTime(now);
+
+			// Update countdown if alarm is set
+			if (alarmTimeRef.current) {
+				const timeLeft = alarmTimeRef.current - now.getTime();
+				if (timeLeft > 0) {
+					const minutes = Math.floor(timeLeft / 60000);
+					const seconds = Math.floor((timeLeft % 60000) / 1000);
+					setTimeUntilAlarm(`${minutes}m ${seconds}s`);
+				}
+			}
 		}, 1000);
 
 		return () => clearInterval(timer);
-	}, []);
-
-	// Pre-load audio when component mounts
-	useEffect(() => {
-		if (audioRef.current) {
-			audioRef.current.load();
-		}
 	}, []);
 
 	const handleSetAlarm = async (): Promise<void> => {
@@ -83,20 +88,28 @@ const AlarmClock: React.FC = () => {
 
 		const [hours, minutes] = alarmTime.split(":").map(Number);
 		const alarmDate = new Date();
-		alarmDate.setHours(hours);
-		alarmDate.setMinutes(minutes);
-		alarmDate.setSeconds(0);
+		alarmDate.setHours(hours, minutes, 0, 0); // Set seconds and milliseconds to 0
 
-		if (alarmDate < new Date()) {
+		// If alarm time is in the past, set it for tomorrow
+		if (alarmDate.getTime() <= Date.now()) {
 			alarmDate.setDate(alarmDate.getDate() + 1);
 		}
 
+		const timestamp = alarmDate.getTime();
+		alarmTimeRef.current = timestamp;
+
 		console.log("Setting alarm for:", alarmDate.toLocaleString());
+		console.log("Current time:", new Date().toLocaleString());
+		console.log(
+			"Time until alarm:",
+			(timestamp - Date.now()) / 1000,
+			"seconds"
+		);
 
 		if (swRegistration.active) {
 			swRegistration.active.postMessage({
 				type: "SET_ALARM",
-				timestamp: alarmDate.getTime(),
+				timestamp: timestamp,
 			});
 			setIsAlarmSet(true);
 		} else {
@@ -113,6 +126,8 @@ const AlarmClock: React.FC = () => {
 			setIsAlarmSet(false);
 			setIsAlarmRinging(false);
 			setAlarmTime("");
+			setTimeUntilAlarm("");
+			alarmTimeRef.current = null;
 
 			// Stop audio
 			if (audioRef.current) {
@@ -138,27 +153,13 @@ const AlarmClock: React.FC = () => {
 			swRegistration.showNotification("Alarm!", options);
 		}
 
-		// Play sound with user interaction check
+		// Play sound
 		if (audioRef.current) {
 			try {
-				// Ensure audio is ready to play
-				await audioRef.current.load();
-				const playPromise = audioRef.current.play();
-
-				if (playPromise !== undefined) {
-					playPromise.catch((error) => {
-						console.error("Error playing alarm sound:", error);
-						// If autoplay was prevented, we might need user interaction
-						if (error.name === "NotAllowedError") {
-							console.log("Autoplay prevented - waiting for user interaction");
-						}
-					});
-				}
+				await audioRef.current.play();
 			} catch (error) {
-				console.error("Error during audio playback:", error);
+				console.error("Error playing alarm sound:", error);
 			}
-		} else {
-			console.error("Audio element not found");
 		}
 	};
 
@@ -196,6 +197,12 @@ const AlarmClock: React.FC = () => {
 						{currentTime.toLocaleTimeString()}
 					</div>
 
+					{timeUntilAlarm && isAlarmSet && !isAlarmRinging && (
+						<div className="text-sm font-medium text-blue-500">
+							Time until alarm: {timeUntilAlarm}
+						</div>
+					)}
+
 					<div className="w-full flex gap-4">
 						<input
 							type="time"
@@ -228,14 +235,19 @@ const AlarmClock: React.FC = () => {
 						)}
 					</div>
 
-					{isAlarmSet && (
+					{isAlarmSet && !isAlarmRinging && (
 						<div className="text-sm text-muted-foreground">
 							Alarm set for {alarmTime}
 						</div>
 					)}
 
-					{/* Audio element with multiple sources for better compatibility */}
-					<audio ref={audioRef} preload="auto" loop>
+					<audio
+						ref={audioRef}
+						preload="auto"
+						loop
+						controls
+						className="w-full mt-4"
+					>
 						<source src="/alarm-sound.mp3" type="audio/mpeg" />
 						<source src="/alarm-sound.wav" type="audio/wav" />
 						Your browser does not support the audio element.
